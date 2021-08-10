@@ -45,19 +45,28 @@ class DQLAgent:
             act_values = self.model.predict(state)
             return np.argmax(act_values[0])
     
-    def replay(self, batch_size):
-        # training
-        if len(self.memory) < batch_size:
+    def replay(self,batch_size):
+        "vectorized replay method"
+        if len(agent.memory) < batch_size:
             return
-        minibatch = random.sample(self.memory,batch_size)
-        for state, action, reward, next_state, done in minibatch:
-            if done:
-                target = reward 
-            else:
-                target = reward + self.gamma*np.amax(self.model.predict(next_state)[0])
-            train_target = self.model.predict(state)
-            train_target[0][action] = target
-            self.model.fit(state,train_target, verbose = 0)
+        # Vectorized method for experience replay
+        minibatch = random.sample(self.memory, batch_size)
+        minibatch = np.array(minibatch)
+        not_done_indices = np.where(minibatch[:, 4] == False)
+        y = np.copy(minibatch[:, 2])
+
+        # If minibatch contains any non-terminal states, use separate update rule for those states
+        if len(not_done_indices[0]) > 0:
+            predict_sprime = self.model.predict(np.vstack(minibatch[:, 3]))
+            predict_sprime_target = self.model.predict(np.vstack(minibatch[:, 3]))
+            
+            # Non-terminal update rule
+            y[not_done_indices] += np.multiply(self.gamma, predict_sprime_target[not_done_indices, np.argmax(predict_sprime[not_done_indices, :][0], axis=1)][0])
+
+        actions = np.array(minibatch[:, 1], dtype=int)
+        y_target = self.model.predict(np.vstack(minibatch[:, 0]))
+        y_target[range(batch_size), actions] = y
+        self.model.fit(np.vstack(minibatch[:, 0]), y_target, epochs=1, verbose=0)
             
     def adaptiveEGreedy(self):
         if self.epsilon > self.epsilon_min:
